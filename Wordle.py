@@ -12,16 +12,21 @@
 #             s = "DI"
 #             counter += 1
 
+# valid_letters = ["Q", "W", "Y", "I", "P", "F", "G", "H", "J", "K", "V", "X", "Z"]
+# s = "DI"
+# counter = 0
+# for i in range(len(valid_letters)):
+#     for j in range(len(valid_letters)):
+#         s += valid_letters[i]
+#         s += valid_letters[j]
+#         s += "Y"
+#         print(f"{counter}: {s}")
+#         counter += 1
+#         s = "DI"
+
+from itertools import product
+
 valid_letters = ["Q", "W", "Y", "I", "P", "F", "G", "H", "J", "K", "V", "X", "Z"]
-s = "DI"
-counter = 0
-for i in range(len(valid_letters)):
-    for j in range(len(valid_letters)):
-        s += valid_letters[i]
-        s += valid_letters[j]
-        s += "Y"
-        print(f"{counter}: {s}")
-        counter += 1
-        s = "DI"
 
-
+for counter, (a, b) in enumerate(product(valid_letters, repeat=2)):
+    print(f"{counter}: DI{a}{b}Y")
