@@ -26,7 +26,7 @@
 
 from itertools import product
 
-valid_letters = ["Q", "W", "Y", "I", "P", "F", "G", "H", "J", "K", "V", "X", "Z"]
+valid_letters = ["Q", "W", "R", "Y", "F", "H", "J", "L", "V", "X", "Z", "B"]
 
 for counter, (a, b) in enumerate(product(valid_letters, repeat=2)):
-    print(f"{counter}: DI{a}{b}Y")
+    print(f"{counter}: LOB{a}{b}")
