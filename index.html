@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Snapshot Bucket</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Outfit:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0d0d0f;
+      --surface: #16161a;
+      --border: #2a2a30;
+      --muted: #6b6b7b;
+      --text: #e4e4e7;
+      --accent: #22d3ee;
+      --danger: #f43f5e;
+      --radius: 12px;
+      --radius-sm: 8px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Outfit', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 1.5rem;
+    }
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 600;
+      margin-bottom: 1rem;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--accent);
+    }
+    .drop-zone {
+      border: 2px dashed var(--border);
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 2.5rem;
+      text-align: center;
+      margin-bottom: 1.5rem;
+      transition: border-color .2s, background .2s;
+    }
+    .drop-zone.drag-over { border-color: var(--accent); background: rgba(34, 211, 238, 0.06); }
+    .drop-zone p { color: var(--muted); font-size: 0.95rem; }
+    .drop-zone kbd { font-family: 'JetBrains Mono', monospace; background: var(--border); padding: .2em .5em; border-radius: 4px; font-size: 0.85em; }
+    .gallery {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 1rem;
+    }
+    .card {
+      background: var(--surface);
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+      border: 1px solid var(--border);
+      position: relative;
+      aspect-ratio: 1;
+    }
+    .card img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .card .actions {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      display: flex;
+      gap: 4px;
+      opacity: 0;
+      transition: opacity .2s;
+    }
+    .card:hover .actions { opacity: 1; }
+    .card button {
+      width: 28px;
+      height: 28px;
+      border: none;
+      border-radius: 6px;
+      background: rgba(0,0,0,.7);
+      color: var(--text);
+      cursor: pointer;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .card button:hover { background: var(--danger); }
+    .toolbar { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; }
+    .toolbar button {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.85rem;
+      padding: .4rem .75rem;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      cursor: pointer;
+    }
+    .toolbar button:hover { border-color: var(--accent); color: var(--accent); }
+    .toolbar button.danger:hover { border-color: var(--danger); color: var(--danger); }
+    .empty { color: var(--muted); text-align: center; padding: 2rem; }
+    #toast {
+      position: fixed;
+      bottom: 1.5rem;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      background: var(--surface);
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      padding: .5rem 1rem;
+      border-radius: var(--radius-sm);
+      font-size: 0.9rem;
+      opacity: 0;
+      transition: transform .25s, opacity .25s;
+    }
+    #toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+    .lightbox {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.9);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      cursor: pointer;
+    }
+    .lightbox.show { display: flex; }
+    .lightbox img { max-width: 90vw; max-height: 90vh; object-fit: contain; }
+  </style>
+</head>
+<body>
+  <h1>Snapshot Bucket</h1>
+  <div class="drop-zone" id="dropZone">
+    <p>Drop images here or <kbd>Ctrl+V</kbd> / <kbd>Cmd+V</kbd> to paste</p>
+  </div>
+  <div class="toolbar">
+    <button type="button" id="clearBtn" class="danger">Clear all</button>
+  </div>
+  <div class="gallery" id="gallery"></div>
+  <div class="empty" id="empty">No snapshots yet. Drop or paste to add.</div>
+  <div class="lightbox" id="lightbox"><img src="" alt=""></div>
+  <div id="toast"></div>
+
+  <script>
+    const DB_NAME = 'SnapshotBucket';
+    const STORE = 'images';
+    const gallery = document.getElementById('gallery');
+    const empty = document.getElementById('empty');
+    const dropZone = document.getElementById('dropZone');
+    const clearBtn = document.getElementById('clearBtn');
+    const lightbox = document.getElementById('lightbox');
+    const toast = document.getElementById('toast');
+
+    function showToast(msg) {
+      toast.textContent = msg;
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 2500);
+    }
+
+    function openDB() {
+      return new Promise((resolve, reject) => {
+        const r = indexedDB.open(DB_NAME, 1);
+        r.onerror = () => reject(r.error);
+        r.onsuccess = () => resolve(r.result);
+        r.onupgradeneeded = (e) => e.target.result.createObjectStore(STORE, { keyPath: 'id' });
+      });
+    }
+
+    async function getAll() {
+      const db = await openDB();
+      return new Promise((resolve, reject) => {
+        const t = db.transaction(STORE, 'readonly');
+        const req = t.objectStore(STORE).getAll();
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    async function addImage(blob) {
+      const db = await openDB();
+      const id = crypto.randomUUID() + (blob.type.includes('png') ? '.png' : blob.type.includes('webp') ? '.webp' : '.jpg');
+      return new Promise((resolve, reject) => {
+        const t = db.transaction(STORE, 'readwrite');
+        t.objectStore(STORE).put({ id, blob, added: Date.now() });
+        t.oncomplete = () => resolve(id);
+        t.onerror = () => reject(t.error);
+      });
+    }
+
+    async function removeImage(id) {
+      const db = await openDB();
+      return new Promise((resolve, reject) => {
+        const t = db.transaction(STORE, 'readwrite');
+        t.objectStore(STORE).delete(id);
+        t.oncomplete = () => resolve();
+        t.onerror = () => reject(t.error);
+      });
+    }
+
+    async function clearAll() {
+      const db = await openDB();
+      return new Promise((resolve, reject) => {
+        const t = db.transaction(STORE, 'readwrite');
+        t.objectStore(STORE).clear();
+        t.oncomplete = () => resolve();
+        t.onerror = () => reject(t.error);
+      });
+    }
+
+    function render(list) {
+      gallery.innerHTML = '';
+      empty.style.display = list.length ? 'none' : 'block';
+      list.sort((a, b) => (b.added || 0) - (a.added || 0));
+      list.forEach(({ id, blob }) => {
+        const url = URL.createObjectURL(blob);
+        const card = document.createElement('div');
+        card.className = 'card';
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = id;
+        const im = document.createElement('img');
+        im.src = url;
+        im.alt = id;
+        a.appendChild(im);
+        card.appendChild(a);
+        const actions = document.createElement('div');
+        actions.className = 'actions';
+        const delBtn = document.createElement('button');
+        delBtn.textContent = '×';
+        delBtn.title = 'Remove';
+        delBtn.onclick = async (e) => {
+          e.preventDefault();
+          await removeImage(id);
+          URL.revokeObjectURL(url);
+          load();
+          showToast('Removed');
+        };
+        actions.appendChild(delBtn);
+        card.appendChild(actions);
+        im.onclick = (e) => {
+          e.preventDefault();
+          lightbox.querySelector('img').src = url;
+          lightbox.classList.add('show');
+        };
+        gallery.appendChild(card);
+      });
+    }
+
+    async function load() {
+      const list = await getAll();
+      render(list);
+    }
+
+    clearBtn.onclick = async () => {
+      if (!confirm('Delete all snapshots?')) return;
+      await clearAll();
+      load();
+      showToast('Cleared');
+    };
+
+    lightbox.onclick = () => lightbox.classList.remove('show');
+
+    async function addFiles(files) {
+      const imageFiles = Array.from(files).filter(f => f.type.startsWith('image/'));
+      if (!imageFiles.length) return;
+      for (const f of imageFiles) await addImage(f);
+      load();
+      showToast('Added ' + imageFiles.length + ' image(s)');
+    }
+
+    dropZone.ondragover = (e) => { e.preventDefault(); dropZone.classList.add('drag-over'); };
+    dropZone.ondragleave = () => dropZone.classList.remove('drag-over');
+    dropZone.ondrop = (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('drag-over');
+      addFiles(e.dataTransfer.files);
+    };
+
+    document.addEventListener('paste', (e) => {
+      const item = [].find.call(e.clipboardData?.items || [], i => i.type.startsWith('image/'));
+      if (!item) return;
+      e.preventDefault();
+      const file = item.getAsFile();
+      if (file) addImage(file).then(() => { load(); showToast('Pasted'); });
+    });
+
+    load();
+  </script>
+</body>
+</html>
