@@ -1,0 +1,3 @@
+# bf_wordle (no deps)
+# Image Storer
+Flask>=3.0.0
