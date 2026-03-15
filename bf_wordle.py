@@ -3,6 +3,11 @@
 Find the best Wordle starting word by scoring every candidate against all
 past answers. Score = sum over all answers of (green_pts * greens + yellow_pts * yellows).
 Default: green=2, yellow=1.
+
+Use --candidates wordle_guesses.txt (or leave default) to include all valid
+Wordle guesses (e.g. SALET, SOARE); otherwise only words in the answers list
+are tried. Note: "Best" here = max total hit points. SALET is often cited as
+optimal for a different criterion (minimizing expected guesses in optimal play).
 """
 
 import argparse
@@ -104,7 +109,7 @@ def main() -> None:
         "--candidates",
         type=Path,
         default=None,
-        help="Candidate words file (default: use same as answers)",
+        help="Candidate words file (default: wordle_guesses.txt if present, else answers file)",
     )
     args = parser.parse_args()
 
@@ -113,9 +118,11 @@ def main() -> None:
         print("Download with: curl -sL https://raw.githubusercontent.com/georgevreilly/wordle/main/answers.txt -o wordle_answers.txt")
         raise SystemExit(1)
 
+    default_candidates = args.answers_file.parent / "wordle_guesses.txt"
+    candidates_file = args.candidates or (default_candidates if default_candidates.exists() else args.answers_file)
     answers = load_words(args.answers_file)
-    candidates = load_words(args.candidates or args.answers_file)
-    print(f"Loaded {len(answers)} answers, {len(candidates)} candidates")
+    candidates = load_words(candidates_file)
+    print(f"Loaded {len(answers)} answers, {len(candidates)} candidates (from {candidates_file.name})")
     print(f"Scoring: green={args.green}, yellow={args.yellow}\n")
 
     scores: list[tuple[str, int]] = []
